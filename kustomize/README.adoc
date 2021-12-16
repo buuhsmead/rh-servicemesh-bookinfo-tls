@@ -1,0 +1,165 @@
+
+= Red Hat OSSM BookInfo
+
+Red Hat OpenShift Service Mesh with Bookinfo application and TLS enabled
+
+
+Using a combination of https://istio.io/latest/docs/examples/bookinfo/ and Maistra-2.1
+
+
+
+== STEP-10
+
+Install of the basic bookinfo application.
+
+
+[source,bash]
+----
+$ oc apply -k step-10/bookinfo
+----
+
+Check that there are only one instance (1/1) running of each pod
+
+[source,bash]
+----
+$ oc get pods -n bookinfo
+
+NAME                              READY   STATUS    RESTARTS   AGE
+details-v1-6cd699df8c-f6sb7       1/1     Running   0          52s
+productpage-v1-5ddcb4b84f-c65gd   1/1     Running   0          52s
+ratings-v1-bdbcc68bc-hfzxk        1/1     Running   0          52s
+reviews-v1-754ddd7b6f-hwx9m       1/1     Running   0          51s
+----
+
+[source,bash]
+----
+PRODUCTPAGE_URL=$(oc get route productpage -o jsonpath='{.spec.host}')
+
+echo "http://${PRODUCTPAGE_URL}/productpage?u=normal"
+----
+
+== STEP-20
+
+Enabling the ServiceMesh configuration.
+This step configures the ServiceMeshControlPlane (smcp) namespace.
+
+
+[source,bash]
+----
+$ oc apply -k step-20/bookinfo
+----
+
+
+Look at the labels of the bookinfo namespace.
+The label will be added because of the ServiceMeshMemberRole (smmr).
+
+
+[source,bash]
+----
+$ oc get namespace bookinfo -o yaml
+
+...
+  labels:
+    maistra.io/member-of: smcp-bookinfo
+...
+
+----
+
+Check that there are two instance (2/2) running of each pod.
+
+(oc delete pod --field-selector=status.phase==Running -n bookinfo)
+
+
+[source,bash]
+----
+$ oc get pods -n bookinfo
+
+NAME                              READY   STATUS    RESTARTS   AGE
+details-v1-6cd699df8c-cknnw       2/2     Running   0          12m
+productpage-v1-5ddcb4b84f-6xn4r   2/2     Running   0          40s
+ratings-v1-bdbcc68bc-4cvc5        2/2     Running   0          34s
+reviews-v1-754ddd7b6f-d6q9d       2/2     Running   0          28s
+----
+
+
+We can now delete the Route to the productpage we created earlier
+
+[source,bash]
+----
+$ oc delete route productpage -n bookinfo
+----
+
+
+
+
+Accessing the productpage via the ServiceMesh
+
+[source,bash]
+----
+$ PRODUCTPAGE_URL=$(oc get route istio-ingressgateway -n smcp-bookinfo -o jsonpath='{.spec.host}')
+
+echo "http://${PRODUCTPAGE_URL}/productpage?u=normal"
+----
+
+The external access to the productpage is HTTP and the internal communication is mTLS.
+Have a look at the Graph overview page of Kiali.
+
+oc get route kiali -n smcp-bookinfo -o jsonpath='https://{.spec.host}'
+
+
+== STEP-12
+
+This step patches the SMCP and enables mTLS for the dataPlane
+
+
+First create the external facing TLS cert
+
+.productpage-cert.cfg
+[source]
+----
+      [ req ]
+      req_extensions     = req_ext
+      distinguished_name = req_distinguished_name
+      prompt             = no
+
+      [req_distinguished_name]
+      commonName = productpage-smcp-bookinfo
+
+      [req_ext]
+      subjectAltName   = @alt_names
+
+      [alt_names]
+      DNS.1  = productpage-smcp-bookinfo.apps.lab.it-speeltuin.eu
+----
+
+
+[source,bash]
+----
+$ openssl req -x509 -config productpage-cert.cfg -extensions req_ext -nodes -days 730 -newkey rsa:2048 -sha256 -keyout productpage-tls.key -out productpage-tls.crt
+
+$ oc create secret tls productpage-certs --cert productpage-tls.crt --key productpage-tls.key -n smcp-bookinfo
+----
+
+[source,yaml]
+----
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: bookinfo-gateway
+spec:
+  selector:
+    istio: ingressgateway # use istio default controller
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: productpage-certs
+    hosts:
+    - productpage-smcp-bookinfo.apps.lab.it-speeltuin.eu
+----
+
+Above Gateway creates a Route named productpage-smcp-bookinfo.apps.lab.it-speeltuin.eu
+with TLS certificates via secret productpage-certs

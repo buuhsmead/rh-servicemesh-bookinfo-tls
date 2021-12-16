@@ -1,0 +1,42 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: bookinfo-gateway
+spec:
+  selector:
+    istio: ingressgateway # use istio default controller
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - productpage-smcp-bookinfo.apps.lab.it-speeltuin.eu
+    tls:
+      httpsRedirect: true # sends 301 redirect for http requests
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    tls:
+      mode: SIMPLE
+      credentialName: productpage-certs
+      minProtocolVersion: "TLSV1_2"
+    hosts:
+    - productpage-smcp-bookinfo.apps.lab.it-speeltuin.eu
+  # - port:
+  #     number: 80
+  #     name: http
+  #     protocol: HTTP
+  #   hosts:
+  #   - probeer-smcp-bookinfo.apps.lab.it-speeltuin.eu
+  # - port:
+  #     number: 443
+  #     name: https
+  #     protocol: HTTPS
+  #   hosts:
+  #   - "*"
+  #   tls:
+  #     mode: PASSTHROUGH
+
+
