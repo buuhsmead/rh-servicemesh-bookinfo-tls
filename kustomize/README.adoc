@@ -109,10 +109,10 @@ oc get route kiali -n smcp-bookinfo -o jsonpath='https://{.spec.host}'
 
 == STEP-12
 
-This step patches the SMCP and enables mTLS for the dataPlane
+This step enables mTLS for the dataPlane
 
 
-First create the external facing TLS cert
+First create the external client facing TLS cert
 
 .productpage-cert.cfg
 [source]
